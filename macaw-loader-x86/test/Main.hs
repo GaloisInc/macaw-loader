@@ -10,8 +10,10 @@ import           System.Exit (exitFailure, ExitCode(..))
 import qualified System.Process as Proc
 
 import qualified Data.ElfEdit as E
-import           Data.Macaw.BinaryLoader (loadBinary, LoadedBinary)
+import           Data.Macaw.BinaryLoader (loadBinary, memoryImage, LoadedBinary)
 import           Data.Macaw.BinaryLoader.X86 () -- for BinaryLoader instance
+import qualified Data.Macaw.Memory as MM
+import qualified Data.Macaw.Memory.Permissions as MM
 import qualified Data.Macaw.Memory.LoadCommon as MM
 import           Data.Macaw.X86 (X86_64)
 
@@ -43,9 +45,19 @@ main = do
 tests :: [FilePath] -> TestTree
 tests binaries = testGroup "Tests" $ concat $
   [ flip map binaries $ \binary -> testCase binary $ withElf binary $ \elf -> do
+
+      -- Ensure loading works, and doesn't raise an exception
       let loadOpts = MM.defaultLoadOptions { MM.loadOffset = Just 0 }
-      _loadedBinary
+      loadedBinary
         <- loadBinary loadOpts elf :: IO (LoadedBinary X86_64 (E.Elf 64))
+
+      -- Some well-formedness assertions
+      let segments = MM.memSegments (memoryImage loadedBinary)
+      when (segments == []) $
+        error "No segments?"
+      when (filter (MM.isExecutable . MM.segmentFlags) segments == []) $
+        error "No executable segments?"
+
       pure ()
   ]
 
