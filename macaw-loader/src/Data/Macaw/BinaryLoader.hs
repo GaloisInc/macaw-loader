@@ -19,6 +19,7 @@ import           Data.Kind ( Type )
 import qualified Data.List.NonEmpty as NEL
 import qualified Data.Macaw.CFG as MM
 import qualified Data.Macaw.Memory.LoadCommon as LC
+import qualified Data.Macaw.Memory.ElfLoader as EL
 import qualified Data.Macaw.CFG.AssignRhs as MR
 import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.NatRepr as NR
@@ -103,6 +104,8 @@ class (MM.MemWidth (MR.ArchAddrWidth arch)) =>
             => LoadedBinary arch binFmt
             -> MM.MemAddr (MM.ArchAddrWidth arch)
             -> m BS.ByteString
+
+  memSymbols :: LoadedBinary arch binFmt -> [EL.MemSymbol (MM.ArchAddrWidth arch)]
 
 -- | Return a runtime representative of the pointer width of the architecture
 addressWidth :: LoadedBinary arch binFmt -> NR.NatRepr (MM.ArchAddrWidth arch)

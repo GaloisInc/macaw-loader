@@ -53,6 +53,7 @@ instance (MC.ArchAddrWidth PPC32.PPC ~ 32) => BL.BinaryLoader PPC32.PPC (E.ElfHe
   loadBinary = loadPPC32Binary
   entryPoints = ppc32EntryPoints
   symbolFor = ppcLookupSymbol
+  memSymbols = memSymbols . BL.binaryFormatData
 
 instance (MC.ArchAddrWidth PPC64.PPC ~ 64) => BL.BinaryLoader PPC64.PPC (E.ElfHeaderInfo 64) where
   type ArchBinaryData PPC64.PPC (E.ElfHeaderInfo 64)  = TOC.TOC 64
@@ -61,6 +62,7 @@ instance (MC.ArchAddrWidth PPC64.PPC ~ 64) => BL.BinaryLoader PPC64.PPC (E.ElfHe
   loadBinary = loadPPC64Binary
   entryPoints = ppc64EntryPoints
   symbolFor = ppcLookupSymbol
+  memSymbols = memSymbols . BL.binaryFormatData
 
 instance (MC.ArchAddrWidth PPC64.PPC ~ 64) => HasTOC PPC64.PPC (E.ElfHeaderInfo 64) where
   getTOC = BL.archBinaryData

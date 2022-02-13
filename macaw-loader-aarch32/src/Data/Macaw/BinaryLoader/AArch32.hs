@@ -39,6 +39,7 @@ instance MBL.BinaryLoader MA.ARM (EE.ElfHeaderInfo 32) where
   loadBinary = loadAArch32Binary
   entryPoints = aarch32EntryPoints
   symbolFor = aarch32LookupSymbol
+  memSymbols = memSymbols . MBL.binaryFormatData
 
 aarch32LookupSymbol :: (X.MonadThrow m)
                     => MBL.LoadedBinary MA.ARM (EE.ElfHeaderInfo 32)

@@ -38,6 +38,7 @@ instance BL.BinaryLoader MX.X86_64 (E.ElfHeaderInfo 64) where
   loadBinary = loadX86Binary
   entryPoints = x86EntryPoints
   symbolFor = x86LookupSymbol
+  memSymbols = memSymbols . BL.binaryFormatData
 
 x86LookupSymbol :: (X.MonadThrow m)
                 => BL.LoadedBinary MX.X86_64 (E.ElfHeaderInfo 64)
