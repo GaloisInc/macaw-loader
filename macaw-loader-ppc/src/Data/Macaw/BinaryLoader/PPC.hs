@@ -16,6 +16,7 @@ where
 
 import qualified Control.Monad.Catch as X
 import qualified Data.ByteString as BS
+import           Data.Either ( fromRight )
 import qualified Data.ElfEdit as E
 import qualified Data.Foldable as F
 import qualified Data.List.NonEmpty as NEL
@@ -29,7 +30,6 @@ import qualified Data.Macaw.Memory.ElfLoader as EL
 import qualified Data.Macaw.Memory.LoadCommon as LC
 import qualified Data.Map.Strict as Map
 import           Data.Maybe ( fromMaybe, mapMaybe )
-import           Data.Word ( Word32 )
 import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Architecture.PPC64 as PPC64
 
@@ -77,18 +77,23 @@ ppcLookupSymbol loadedBinary funcAddr =
 ppc64EntryPoints :: (X.MonadThrow m, MC.ArchAddrWidth PPC64.PPC ~ 64)
                  => BL.LoadedBinary PPC64.PPC (E.ElfHeaderInfo 64)
                  -> m (NEL.NonEmpty (MC.MemSegmentOff 64))
-ppc64EntryPoints loadedBinary = do
-  entryAddr <- liftMemErr PPCElfMemoryError
-               (MC.readAddr mem (BL.memoryEndianness loadedBinary) tocEntryAbsAddr)
-  absEntryAddr <- liftMaybe (PPCInvalidAbsoluteAddress entryAddr) (MC.asSegmentOff mem (MC.incAddr (fromIntegral offset) entryAddr))
-  let otherEntries = mapMaybe (MC.asSegmentOff mem . MM.incAddr (fromIntegral offset)) (TOC.entryPoints toc)
-  return (absEntryAddr NEL.:| otherEntries)
+ppc64EntryPoints loadedBinary
+  | null tocEntryPoints
+  = ppcEntryPointsGeneric loadedBinary
+
+  | otherwise = do
+      entryAddr <- liftMemErr PPCElfMemoryError
+                   (MC.readAddr mem (BL.memoryEndianness loadedBinary) tocEntryAbsAddr)
+      absEntryAddr <- liftMaybe (PPCInvalidAbsoluteAddress entryAddr) (MC.asSegmentOff mem (MC.incAddr (fromIntegral offset) entryAddr))
+      let otherEntries = mapMaybe (MC.asSegmentOff mem . MM.incAddr (fromIntegral offset)) tocEntryPoints
+      return (absEntryAddr NEL.:| otherEntries)
   where
     offset = fromMaybe 0 (LC.loadOffset (BL.loadOptions loadedBinary))
     tocEntryAddr = E.headerEntry $ E.header (elf (BL.binaryFormatData loadedBinary))
     tocEntryAbsAddr :: EL.MemWidth w => MC.MemAddr w
     tocEntryAbsAddr = MC.absoluteAddr (MC.memWord (fromIntegral (offset + tocEntryAddr)))
     toc = BL.archBinaryData loadedBinary
+    tocEntryPoints = TOC.entryPoints toc
     mem = BL.memoryImage loadedBinary
 
 liftMaybe :: (X.Exception e, X.MonadThrow m) => e -> Maybe a -> m a
@@ -107,7 +112,20 @@ ppc32EntryPoints
   :: (X.MonadThrow m, MC.ArchAddrWidth PPC32.PPC ~ 32)
   => BL.LoadedBinary PPC32.PPC (E.ElfHeaderInfo 32)
   -> m (NEL.NonEmpty (MC.MemSegmentOff 32))
-ppc32EntryPoints loadedBinary =
+ppc32EntryPoints = ppcEntryPointsGeneric
+
+-- | TODO RGS: Docs
+ppcEntryPointsGeneric ::
+     forall m arch w
+   . ( X.MonadThrow m
+     , MC.ArchAddrWidth arch ~ w
+     , EL.MemWidth w
+     , Integral (E.ElfWordType w)
+     , BL.BinaryFormatData arch (E.ElfHeaderInfo w) ~ PPCElfData w
+     )
+  => BL.LoadedBinary arch (E.ElfHeaderInfo w)
+  -> m (NEL.NonEmpty (MC.MemSegmentOff w))
+ppcEntryPointsGeneric loadedBinary =
   case BLE.resolveAbsoluteAddress mem entryAddr of
     Nothing -> X.throwM (InvalidEntryPoint entryAddr)
     Just entryPoint -> return (entryPoint NEL.:| mapMaybe (BLE.resolveAbsoluteAddress mem) symbols)
@@ -123,8 +141,8 @@ ppc32EntryPoints loadedBinary =
               , E.steType entry == E.STT_FUNC
               ]
 
-    symtabEntriesList :: Maybe (Either E.SymtabError (E.Symtab 32))
-                      -> [E.SymtabEntry BS.ByteString Word32]
+    symtabEntriesList :: Maybe (Either E.SymtabError (E.Symtab w))
+                      -> [E.SymtabEntry BS.ByteString (E.ElfWordType w)]
     symtabEntriesList symtab =
       case symtab of
         Nothing -> []
@@ -166,22 +184,21 @@ loadPPC64Binary lopts e = do
   case EL.memoryForElf lopts e of
     Left err -> X.throwM (PPCElfLoadError err)
     Right (mem, symbols, warnings, _) ->
-      case BE.parseTOC e of
-        Left err -> X.throwM (PPCTOCLoadError err)
-        Right toc ->
-          return BL.LoadedBinary { BL.memoryImage = mem
-                                 , BL.memoryEndianness = MC.BigEndian
-                                 , BL.archBinaryData = toc
-                                 , BL.binaryFormatData =
-                                   PPCElfData { elf = e
-                                              , memSymbols = symbols
-                                              , symbolIndex = indexSymbols toc symbols
-                                              }
-                                 , BL.loadDiagnostics = warnings
-                                 , BL.binaryRepr = BL.Elf64Repr
-                                 , BL.originalBinary = e
-                                 , BL.loadOptions = lopts
-                                 }
+      -- TODO RGS: Is it OK to discard the error like this?
+      let toc = fromRight (TOC.toc Map.empty Map.empty) (BE.parseTOC e) in
+      return BL.LoadedBinary { BL.memoryImage = mem
+                             , BL.memoryEndianness = MC.BigEndian
+                             , BL.archBinaryData = toc
+                             , BL.binaryFormatData =
+                               PPCElfData { elf = e
+                                          , memSymbols = symbols
+                                          , symbolIndex = indexSymbols toc symbols
+                                          }
+                             , BL.loadDiagnostics = warnings
+                             , BL.binaryRepr = BL.Elf64Repr
+                             , BL.originalBinary = e
+                             , BL.loadOptions = lopts
+                             }
 
 indexSymbols :: (Foldable t)
              => TOC.TOC w
@@ -190,9 +207,11 @@ indexSymbols :: (Foldable t)
 indexSymbols toc = F.foldl' doIndex Map.empty
   where
     doIndex m memSym =
-      case TOC.mapTOCEntryAddress toc (MC.segoffAddr (EL.memSymbolStart memSym)) of
-        Nothing -> m
-        Just funcAddr -> Map.insert funcAddr (EL.memSymbolName memSym) m
+      let funcAddr = MC.segoffAddr (EL.memSymbolStart memSym) in
+      let funcName = EL.memSymbolName memSym in
+      case TOC.mapTOCEntryAddress toc funcAddr of
+        Nothing        -> Map.insert funcAddr  funcName m
+        Just funcAddr' -> Map.insert funcAddr' funcName m
 
 data PPCLoadException = PPCElfLoadError String
                       | PPCTOCLoadError X.SomeException
