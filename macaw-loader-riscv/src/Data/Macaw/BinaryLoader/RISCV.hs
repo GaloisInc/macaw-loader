@@ -29,8 +29,7 @@ import qualified GRIFT.Types as G
 import qualified Data.Macaw.RISCV as MR
 
 data RISCVElfData w =
-  RISCVElfData { elf :: EE.ElfHeaderInfo w
-               , memSymbols :: [EL.MemSymbol w]
+  RISCVElfData { memSymbols :: [EL.MemSymbol w]
                , symbolIndex :: Map.Map (MM.MemAddr w) BS.ByteString
                }
 
@@ -58,7 +57,7 @@ riscvEntryPoints :: forall m rv
                  -> m (DLN.NonEmpty (MM.MemSegmentOff (G.RVWidth rv)))
 riscvEntryPoints loadedBinary =
   EE.elfClassInstances elfClass $
-  let addr = MM.memWord (offset + fromIntegral (EE.headerEntry (EE.header (elf (MBL.binaryFormatData loadedBinary))))) in
+  let addr = MM.memWord (offset + fromIntegral (EE.headerEntry (EE.header elfData))) in
   let symbols = [ MM.memWord (offset + fromIntegral (EE.steValue entry))
                 | entry <- staticSyms ++ dynSyms
                 , EE.steType entry == EE.STT_FUNC
@@ -70,7 +69,7 @@ riscvEntryPoints loadedBinary =
   where
     offset = fromMaybe 0 (LC.loadOffset (MBL.loadOptions loadedBinary))
     mem = MBL.memoryImage loadedBinary
-    elfData = elf (MBL.binaryFormatData loadedBinary)
+    elfData = BL.originalBinary loadedBinary
     elfHeader = EE.header elfData
     elfClass = EE.headerClass elfHeader
     staticSyms = symtabEntriesList $ EE.decodeHeaderSymtab elfData
@@ -97,8 +96,7 @@ loadRiscvBinary lopts e =
                               , MBL.memoryEndianness = MM.LittleEndian
                               , MBL.archBinaryData = ()
                               , MBL.binaryFormatData =
-                                RISCVElfData { elf = e
-                                             , memSymbols = symbols
+                                RISCVElfData { memSymbols = symbols
                                              , symbolIndex = indexSymbols symbols
                                              }
                               , MBL.loadDiagnostics = warnings

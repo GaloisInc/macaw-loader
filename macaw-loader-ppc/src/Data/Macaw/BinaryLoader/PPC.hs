@@ -36,8 +36,7 @@ import qualified SemMC.Architecture.PPC64 as PPC64
 class HasTOC arch binFmt where
   getTOC :: BL.LoadedBinary arch binFmt -> TOC.TOC (MC.ArchAddrWidth arch)
 
-data PPCElfData w = PPCElfData { elf :: E.ElfHeaderInfo w
-                               , memSymbols :: [EL.MemSymbol w]
+data PPCElfData w = PPCElfData { memSymbols :: [EL.MemSymbol w]
                                , symbolIndex :: Map.Map (MC.MemAddr w) BS.ByteString
                                }
 
@@ -85,7 +84,7 @@ ppc64EntryPoints loadedBinary = do
   return (absEntryAddr NEL.:| otherEntries)
   where
     offset = fromMaybe 0 (LC.loadOffset (BL.loadOptions loadedBinary))
-    tocEntryAddr = E.headerEntry $ E.header (elf (BL.binaryFormatData loadedBinary))
+    tocEntryAddr = E.headerEntry (E.header (BL.originalBinary loadedBinary))
     tocEntryAbsAddr :: EL.MemWidth w => MC.MemAddr w
     tocEntryAbsAddr = MC.absoluteAddr (MC.memWord (fromIntegral (offset + tocEntryAddr)))
     toc = BL.archBinaryData loadedBinary
@@ -114,8 +113,8 @@ ppc32EntryPoints loadedBinary =
   where
     offset = fromMaybe 0 (LC.loadOffset (BL.loadOptions loadedBinary))
     mem = BL.memoryImage loadedBinary
-    entryAddr = MM.memWord (offset + fromIntegral (E.headerEntry (E.header (elf (BL.binaryFormatData loadedBinary)))))
-    elfData = elf (BL.binaryFormatData loadedBinary)
+    elfData = BL.originalBinary loadedBinary
+    entryAddr = MM.memWord (offset + fromIntegral (E.headerEntry (E.header elfData)))
     staticSyms = symtabEntriesList $ E.decodeHeaderSymtab elfData
     dynSyms = symtabEntriesList $ E.decodeHeaderDynsym elfData
     symbols = [ MM.memWord (offset + fromIntegral (E.steValue entry))
@@ -144,8 +143,7 @@ loadPPC32Binary lopts e =
                              , BL.memoryEndianness = MC.BigEndian
                              , BL.archBinaryData = ()
                              , BL.binaryFormatData =
-                               PPCElfData { elf = e
-                                          , memSymbols = symbols
+                               PPCElfData { memSymbols = symbols
                                           , symbolIndex = index32 symbols
                                           }
                              , BL.loadDiagnostics = warnings
@@ -173,8 +171,7 @@ loadPPC64Binary lopts e = do
                                  , BL.memoryEndianness = MC.BigEndian
                                  , BL.archBinaryData = toc
                                  , BL.binaryFormatData =
-                                   PPCElfData { elf = e
-                                              , memSymbols = symbols
+                                   PPCElfData { memSymbols = symbols
                                               , symbolIndex = indexSymbols toc symbols
                                               }
                                  , BL.loadDiagnostics = warnings

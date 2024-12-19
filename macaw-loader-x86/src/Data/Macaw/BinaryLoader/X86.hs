@@ -26,8 +26,7 @@ import           Data.Word ( Word64 )
 
 import qualified Data.Macaw.X86 as MX
 
-data X86ElfData w = X86ElfData { elf :: E.ElfHeaderInfo w
-                               , memSymbols :: [EL.MemSymbol w]
+data X86ElfData w = X86ElfData { memSymbols :: [EL.MemSymbol w]
                                , symbolIndex :: Map.Map (MM.MemAddr 64) BS.ByteString
                                }
 
@@ -59,8 +58,8 @@ x86EntryPoints loadedBinary = do
   where
     offset = fromMaybe 0 (LC.loadOffset (BL.loadOptions loadedBinary))
     mem = BL.memoryImage loadedBinary
-    addrWord = MM.memWord (offset + (fromIntegral (E.headerEntry (E.header (elf (BL.binaryFormatData loadedBinary))))))
-    elfData = elf (BL.binaryFormatData loadedBinary)
+    elfData = BL.originalBinary loadedBinary
+    addrWord = MM.memWord (offset + fromIntegral (E.headerEntry (E.header elfData)))
     staticSyms = symtabEntriesList $ E.decodeHeaderSymtab elfData
     dynSyms = symtabEntriesList $ E.decodeHeaderDynsym elfData
     symbolWords = [ MM.memWord (offset + E.steValue entry)
@@ -88,8 +87,7 @@ loadX86Binary lopts e = do
                              , BL.memoryEndianness = MM.LittleEndian
                              , BL.archBinaryData = ()
                              , BL.binaryFormatData =
-                               X86ElfData { elf = e
-                                          , memSymbols = symbols
+                               X86ElfData { memSymbols = symbols
                                           , symbolIndex = indexSymbols symbols
                                           }
                              , BL.loadDiagnostics = warnings

@@ -27,8 +27,7 @@ import           Data.Word ( Word32 )
 import qualified Data.Macaw.ARM as MA
 
 data AArch32ElfData =
-  AArch32ElfData { elf :: EE.ElfHeaderInfo 32
-                 , memSymbols :: [EL.MemSymbol 32]
+  AArch32ElfData { memSymbols :: [EL.MemSymbol 32]
                  , symbolIndex :: Map.Map (MM.MemAddr 32) BS.ByteString
                  }
 
@@ -60,8 +59,8 @@ aarch32EntryPoints loadedBinary =
   where
     offset = fromMaybe 0 (LC.loadOffset (MBL.loadOptions loadedBinary))
     mem = MBL.memoryImage loadedBinary
-    addr = MM.memWord (offset + fromIntegral (EE.headerEntry (EE.header (elf (MBL.binaryFormatData loadedBinary)))))
-    elfData = elf (MBL.binaryFormatData loadedBinary)
+    elfData = MBL.originalBinary loadedBinary
+    addr = MM.memWord (offset + fromIntegral (EE.headerEntry (EE.header elfData)))
     staticSyms = symtabEntriesList $ EE.decodeHeaderSymtab elfData
     dynSyms = symtabEntriesList $ EE.decodeHeaderDynsym elfData
     symbols = [ MM.memWord (offset + fromIntegral (EE.steValue entry))
@@ -89,8 +88,7 @@ loadAArch32Binary lopts e =
                               , MBL.memoryEndianness = MM.LittleEndian
                               , MBL.archBinaryData = ()
                               , MBL.binaryFormatData =
-                                AArch32ElfData { elf = e
-                                               , memSymbols = symbols
+                                AArch32ElfData { memSymbols = symbols
                                                , symbolIndex = indexSymbols symbols
                                                }
                               , MBL.loadDiagnostics = warnings
