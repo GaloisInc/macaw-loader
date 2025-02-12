@@ -1,3 +1,6 @@
+-- TODO: https://github.com/travitch/itanium-abi/pull/15
+allow-newer: itanium-abi:text
+
 packages:
     macaw-loader
     macaw-loader-x86
