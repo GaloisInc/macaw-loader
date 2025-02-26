@@ -1,3 +1,6 @@
+This repo is **deprecated** because its functionality has been merged into the
+[[https://github.com/GaloisInc/macaw][macaw]] repo.
+
 This library provides a uniform interface to load a binary (e.g. in
 ELF format) and get [[https://github.com/GaloisInc/macaw][macaw]] Memory and a list of entry points.
 
